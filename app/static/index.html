@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Universal Webhook Playground</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        background: '#0B0F19',
+                        surface: '#111827',
+                        primary: '#3B82F6',
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body class="bg-background text-gray-200 min-h-screen font-sans antialiased overflow-y-scroll transition-colors duration-300">
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2"></div>
+
+    <div class="max-w-6xl mx-auto px-6 py-8">
+        
+        <!-- Header & System Status -->
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+            <div>
+                <h1 class="text-3xl font-bold text-white flex items-center gap-3">
+                    <i data-lucide="zap" class="text-primary"></i>
+                    Universal Webhook Adapter
+                </h1>
+                <p class="text-gray-400 mt-1">Accept, transform, and normalize webhooks instantly via Claude AI.</p>
+            </div>
+            
+            <div class="glass-card flex items-center space-x-6 p-4 rounded-xl text-sm border border-white/5">
+                <div class="flex items-center gap-2">
+                    <span class="relative flex h-3 w-3">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                      <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                    </span>
+                    <span id="sys-status" class="font-medium text-gray-300">Healthy</span>
+                </div>
+                <div class="text-gray-400 flex items-center gap-2">
+                    <i data-lucide="layers" class="w-4 h-4"></i>
+                    Queue: <span id="sys-queue" class="font-mono text-white ml-1">0</span>
+                </div>
+                <div class="text-gray-400 flex items-center gap-2">
+                    <i data-lucide="check-circle" class="w-4 h-4"></i>
+                    Processed: <span id="sys-processed" class="font-mono text-white ml-1">0</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <div class="flex space-x-1 border-b border-gray-800 mb-6">
+            <button id="tab-playground" class="tab-btn active px-6 py-3 font-medium transition-colors border-b-2 border-primary text-primary flex items-center gap-2" onclick="switchTab('playground')">
+                <i data-lucide="terminal-square" class="w-4 h-4"></i> Playground
+            </button>
+            <button id="tab-logs" class="tab-btn px-6 py-3 font-medium transition-colors border-b-2 border-transparent text-gray-500 hover:text-gray-300 flex items-center gap-2" onclick="switchTab('logs')">
+                <i data-lucide="list" class="w-4 h-4"></i> Logs
+            </button>
+            <div class="flex-grow flex justify-end items-center">
+                <button id="theme-toggle" class="text-gray-400 hover:text-white transition-colors p-2" title="Toggle Light/Dark Theme">
+                    <i data-lucide="sun" class="w-5 h-5 hidden dark:block"></i>
+                    <i data-lucide="moon" class="w-5 h-5 block dark:hidden"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Playground View -->
+        <section id="view-playground" class="space-y-6">
+            <div class="flex justify-between items-center">
+                <h2 class="text-xl font-semibold text-white">Manual Injection</h2>
+                <div class="flex gap-2">
+                    <button class="px-3 py-1 text-xs font-medium bg-surface hover:bg-gray-800 border border-gray-700/50 rounded-md transition-colors" onclick="loadSample('stripe')">Sample: Stripe</button>
+                    <button class="px-3 py-1 text-xs font-medium bg-surface hover:bg-gray-800 border border-gray-700/50 rounded-md transition-colors" onclick="loadSample('github')">Sample: GitHub</button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Input Panel -->
+                <div class="flex flex-col gap-3 h-[600px]">
+                    <div class="flex justify-between items-center text-sm text-gray-400 px-1">
+                        <span class="uppercase tracking-wider font-semibold text-xs">Raw Input (JSON)</span>
+                        <div class="flex gap-3">
+                            <button class="hover:text-white transition" onclick="formatJSON('raw-input')" title="Prettify JSON"><i data-lucide="braces" class="w-4 h-4"></i></button>
+                            <button class="hover:text-white transition" onclick="copyJSON('raw-input')" title="Copy JSON"><i data-lucide="copy" class="w-4 h-4"></i></button>
+                        </div>
+                    </div>
+                    <textarea id="raw-input" class="w-full flex-grow p-4 font-mono text-sm bg-[#0d1117] border border-gray-800 rounded-xl focus:border-primary focus:ring-1 focus:ring-primary outline-none resize-none transition-all" spellcheck="false" placeholder="Paste your webhook payload here..."></textarea>
+                    
+                    <button id="btn-process" onclick="processWebhook()" class="bg-primary hover:bg-blue-600 text-white font-medium py-3 rounded-xl transition-all shadow-[0_0_15px_rgba(59,130,246,0.3)] hover:shadow-[0_0_25px_rgba(59,130,246,0.5)] flex items-center justify-center gap-2 group disabled:opacity-70 disabled:cursor-not-allowed">
+                        <i data-lucide="send" class="w-4 h-4 transition-transform group-hover:translate-x-1"></i>
+                        <span id="btn-process-text">Process Webhook</span>
+                        <svg id="btn-process-spinner" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    </button>
+                </div>
+
+                <!-- Output Panel -->
+                <div class="flex flex-col gap-3 h-[600px]">
+                    <div class="flex justify-between items-center text-sm text-gray-400 px-1">
+                        <span class="uppercase tracking-wider font-semibold text-xs">Normalized Output</span>
+                        <div class="flex gap-2">
+                            <span id="playground-status" class="status-badge hidden"></span>
+                            <span id="playground-confidence" class="confidence-badge hidden"></span>
+                        </div>
+                    </div>
+                    <div class="relative w-full flex-grow bg-[#0d1117] border border-gray-800 rounded-xl overflow-hidden flex flex-col">
+                        <div id="output-meta" class="px-4 py-3 bg-gray-900/50 border-b border-gray-800 text-sm hidden flex-wrap gap-4">
+                            <div><span class="text-gray-500 mr-1">Event:</span><span id="out-event" class="text-blue-400 font-mono"></span></div>
+                            <div><span class="text-gray-500 mr-1 flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i> Actor:</span><span id="out-actor" class="text-green-400 font-mono"></span></div>
+                        </div>
+                        <div class="relative flex-grow">
+                            <!-- Loader Overlay -->
+                            <div id="playground-loader" class="absolute inset-0 bg-background/50 backdrop-blur-sm z-10 flex flex-col items-center justify-center opacity-0 pointer-events-none transition-opacity duration-300">
+                                <div class="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                                <span class="text-sm text-gray-400 mt-3 animate-pulse">AI Agent processing...</span>
+                            </div>
+                            <textarea id="normalized-output" readonly class="w-full h-full p-4 font-mono text-sm bg-transparent outline-none resize-none transition-colors" placeholder="Result will appear here..."></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Logs View -->
+        <section id="view-logs" class="hidden space-y-6">
+            <div class="flex justify-between items-center">
+                <h2 class="text-xl font-semibold text-white">Recent Webhooks</h2>
+                <button onclick="fetchLogs()" class="text-sm font-medium text-gray-400 hover:text-white transition flex items-center gap-2">
+                    <i data-lucide="refresh-cw" class="w-4 h-4" id="refresh-icon"></i> Refresh
+                </button>
+            </div>
+            
+            <div class="w-full bg-surface border border-gray-800/50 rounded-xl overflow-hidden shadow-xl" id="logs-container">
+                <!-- Data Table will be injected here -->
+                <div class="p-8 text-center text-gray-500">Loading logs...</div>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- Modals -->
+    <div id="log-detail-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 hidden flex items-center justify-center opacity-0 transition-opacity p-4">
+        <div class="bg-surface border border-gray-800 rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col transform scale-95 transition-transform" id="log-detail-content">
+            <!-- Modal Header -->
+            <div class="flex justify-between items-center p-5 border-b border-gray-800">
+                <h3 class="font-semibold text-white flex items-center gap-3">
+                    Webhook Details
+                    <span id="modal-req-id" class="text-xs font-mono text-gray-500 bg-gray-900 px-2 py-1 rounded"></span>
+                </h3>
+                <button class="text-gray-400 hover:text-white transition p-1" onclick="closeLogModal()">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <!-- Modal Body -->
+            <div class="p-5 overflow-y-auto flex-grow">
+                <div class="flex items-center gap-4 mb-6">
+                    <span id="modal-status"></span>
+                    <button id="modal-replay-btn" class="ml-auto text-sm bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded flex items-center gap-2 transition" onclick="replayCurrentWebhook()">
+                        <i data-lucide="rotate-ccw" class="w-4 h-4"></i> Add to Queue (Replay)
+                    </button>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="flex flex-col gap-2">
+                        <div class="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Raw Payload</div>
+                        <pre class="bg-[#0d1117] p-3 rounded border border-gray-800 text-xs font-mono text-gray-300 overflow-x-auto h-[400px]" id="modal-raw"></pre>
+                    </div>
+                    <div class="flex flex-col gap-2">
+                        <div class="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Normalized Payload</div>
+                        <pre class="bg-[#0d1117] p-3 rounded border border-gray-800 text-xs font-mono text-blue-300 overflow-x-auto h-[400px]" id="modal-norm"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>lucide.createIcons();</script>
+    <!-- Custom Logic -->
+    <script src="/app.js"></script>
+</body>
+</html>

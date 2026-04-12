@@ -42,6 +42,10 @@ _queue: asyncio.Queue[_Job] = asyncio.Queue()
 # Public helpers
 # ---------------------------------------------------------------------------
 
+def get_queue_size() -> int:
+    """Return the number of items currently in the background queue."""
+    return _queue.qsize()
+
 async def enqueue_webhook(webhook_id: int, raw_payload: dict[str, Any], attempt: int = 0) -> bool:
     """
     Add a job to the in-memory processing queue.

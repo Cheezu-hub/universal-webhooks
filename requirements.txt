@@ -22,3 +22,6 @@ limits>=3.6.0
 
 # --- Retry logic ---
 tenacity>=8.2.0
+
+# --- Static files ---
+aiofiles>=23.2.1

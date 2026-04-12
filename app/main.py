@@ -21,6 +21,8 @@ from app.api.routes import router  # noqa: E402
 from app.core.config import settings  # noqa: E402
 from app.core.limiter import limiter  # noqa: E402
 from app.db.database import init_db  # noqa: E402
+import os
+from fastapi.staticfiles import StaticFiles
 from app.services.queue import start_queue_worker  # noqa: E402
 from app.utils.logger import setup_logging  # noqa: E402
 
@@ -64,3 +66,8 @@ app.add_middleware(SlowAPIMiddleware)
 
 # --- Routes ---
 app.include_router(router)
+
+# --- Frontend Dashboard ---
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+os.makedirs(static_dir, exist_ok=True)
+app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")

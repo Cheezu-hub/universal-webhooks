@@ -31,7 +31,7 @@ from app.db.database import get_db
 from app.db.models import Webhook
 from app.schemas.event_schema import WebhookRecord, WebhookResponse
 from app.services.idempotency import extract_idempotency_key, find_duplicate
-from app.services.queue import enqueue_webhook
+from app.services.queue import enqueue_webhook, get_queue_size
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -151,3 +151,90 @@ async def get_webhook(request_id: str, db: AsyncSession = Depends(get_db)) -> We
 async def health_check() -> dict:
     """Liveness probe."""
     return {"status": "ok", "service": "universal-webhook-adapter", "version": "2.0.0"}
+
+
+# ---------------------------------------------------------------------------
+# Dashboard UI Endpoints
+# ---------------------------------------------------------------------------
+
+@router.get("/api/webhooks", response_model=list[WebhookRecord])
+async def list_webhooks(limit: int = 20, db: AsyncSession = Depends(get_db)) -> list[WebhookRecord]:
+    """Fetch the latest webhooks for the dashboard logs view."""
+    # Descending order by id or created_at
+    result = await db.execute(
+        select(Webhook).order_by(Webhook.created_at.desc()).limit(limit)
+    )
+    webhooks = result.scalars().all()
+    
+    records = []
+    for wh in webhooks:
+        normalized = json.loads(wh.normalized_payload) if wh.normalized_payload else None
+        records.append(
+            WebhookRecord(
+                request_id=wh.request_id,
+                status=wh.status,
+                provider=wh.provider,
+                confidence=wh.confidence,
+                normalized_payload=normalized,
+                retry_count=wh.retry_count,
+                error_detail=wh.error_detail,
+                created_at=wh.created_at,
+                updated_at=wh.updated_at,
+            )
+        )
+    return records
+
+
+@router.post("/api/webhooks/{request_id}/replay", response_model=WebhookResponse)
+async def replay_webhook(request_id: str, db: AsyncSession = Depends(get_db)) -> WebhookResponse:
+    """Manually replay a webhook from the dashboard."""
+    result = await db.execute(select(Webhook).where(Webhook.request_id == request_id))
+    webhook = result.scalar_one_or_none()
+
+    if not webhook:
+        raise HTTPException(status_code=404, detail=f"Webhook '{request_id}' not found.")
+
+    raw_payload = json.loads(webhook.raw_payload)
+    
+    # Reset status
+    webhook.status = "queued"
+    webhook.error_detail = None
+    webhook.retry_count = 0
+    await db.commit()
+    
+    accepted = await enqueue_webhook(webhook.id, raw_payload)
+    if not accepted:
+        webhook.status = "failed"
+        webhook.error_detail = "Processing queue full — please retry later."
+        await db.commit()
+        raise HTTPException(
+            status_code=503,
+            detail="Queue is full. Replay failed.",
+        )
+
+    logger.info("Webhook replayed | request_id=%s", request_id)
+    return WebhookResponse(
+        request_id=request_id,
+        status="queued",
+        message="Webhook replayed successfully.",
+    )
+
+
+@router.get("/api/system/status")
+async def system_status(db: AsyncSession = Depends(get_db)) -> dict:
+    """Return metrics for the frontend Dashboard."""
+    from sqlalchemy import func
+    
+    # Count webhooks by status
+    result = await db.execute(
+        select(Webhook.status, func.count()).group_by(Webhook.status)
+    )
+    counts = dict(result.all())
+    
+    return {
+        "status": "Healthy",
+        "queue_size": get_queue_size(),
+        "processed": counts.get("processed", 0),
+        "failed": counts.get("failed", 0),
+        "total": sum(counts.values())
+    }

@@ -2,8 +2,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # --- Anthropic ---
-    ANTHROPIC_API_KEY: str = ""
+    # --- AI Provider ---
+    AI_PROVIDER: str = "groq"
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
 
     # --- Webhook signature secrets (leave blank to skip verification) ---
     STRIPE_WEBHOOK_SECRET: str = ""
@@ -18,7 +20,7 @@ class Settings(BaseSettings):
     RETRY_DELAY_BASE: float = 2.0        # Exponential backoff base (seconds)
 
     # --- AI mapper ---
-    AI_TIMEOUT_SECONDS: float = 30.0
+    AI_TIMEOUT_SECONDS: float = 10.0
     AI_MAX_RETRIES: int = 3              # API-level retries (tenacity)
 
     # --- Misc ---

@@ -157,3 +157,6 @@ cython_debug/
 *.sqlite
 .DS_Store
 Thumbs.db
+venv2/
+scratch/
+

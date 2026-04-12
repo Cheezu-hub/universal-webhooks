@@ -3,10 +3,10 @@ AI Webhook Mapper — Enhanced with retry logic and error categorization.
 
 Retry strategy
 --------------
-* Transient errors (rate-limit, server error, timeout, network):
+* Transient errors (rate-limit, server error, timeout, network, invalid json):
   Retried up to ``settings.AI_MAX_RETRIES`` times with exponential back-off
   (2 s → 4 s → 8 s … capped at 30 s).
-* Permanent errors (bad JSON, schema validation failure):
+* Permanent errors (schema validation failure):
   Logged and immediately fall back — retrying would produce the same result.
 * No API key:
   Immediately fall back.
@@ -30,8 +30,8 @@ from app.schemas.event_schema import StandardEvent
 
 logger = logging.getLogger(__name__)
 
-ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
-ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
+# --- Groq / OpenAI Compatible ---
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 SYSTEM_PROMPT = """\
 You are a webhook normalization engine.
@@ -45,7 +45,7 @@ Rules:
 - infer meaning from context if fields are unclear
 - confidence: 0.8–1.0 for clear known formats, 0.5–0.8 for partial inference, <0.5 for unclear
 
-Return ONLY valid JSON with no markdown, no explanation:
+Return ONLY valid JSON (no text, no markdown). Do not explain anything. Output must be perfectly valid JSON parseable by json.loads().
 {
   "event_type": "...",
   "actor": "...",
@@ -69,7 +69,7 @@ class AIErrorCategory(str, Enum):
 
 
 class RetryableAIError(Exception):
-    """Transient error — safe to retry (rate-limit, 5xx, timeout, network)."""
+    """Transient error — safe to retry (rate-limit, 5xx, timeout, network, parse error)."""
 
     def __init__(self, category: AIErrorCategory, message: str) -> None:
         self.category = category
@@ -77,7 +77,7 @@ class RetryableAIError(Exception):
 
 
 class PermanentAIError(Exception):
-    """Non-retryable error — retrying would not help (bad JSON, schema mismatch)."""
+    """Non-retryable error — retrying would not help (schema mismatch)."""
 
     def __init__(self, category: AIErrorCategory, message: str) -> None:
         self.category = category
@@ -88,65 +88,86 @@ class PermanentAIError(Exception):
 # Single API attempt
 # ---------------------------------------------------------------------------
 
-async def _call_claude_once(api_key: str, raw_json: dict) -> StandardEvent:
+async def _call_ai_once(provider: str, api_key: str, raw_json: dict) -> StandardEvent:
     """
-    Make one HTTP call to the Claude API and return a validated ``StandardEvent``.
+    Make one HTTP call to the AI Provider API and return a validated ``StandardEvent``.
 
     Raises
     ------
     RetryableAIError   — for transient errors worth retrying.
     PermanentAIError   — for deterministic failures (won't improve on retry).
     """
-    user_message = f"Here is the webhook JSON:\n{json.dumps(raw_json, indent=2)}"
+    # 1. Truncate payload representation to prevent token limit breaches
+    json_repr = json.dumps(raw_json, indent=2)
+    if len(json_repr) > 8000:
+        logger.warning(f"Payload length {len(json_repr)} > 8000 chars. Truncating representation sent to AI.")
+        json_repr = json_repr[:8000] + "\n...[TRUNCATED]"
 
-    request_body = {
-        "model": ANTHROPIC_MODEL,
-        "max_tokens": 1024,
-        "system": SYSTEM_PROMPT,
-        "messages": [{"role": "user", "content": user_message}],
-    }
+    user_message = f"Here is the webhook JSON:\n{json_repr}"
 
-    headers = {
-        "x-api-key": api_key,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-    }
+    if provider == "groq":
+        url = GROQ_API_URL
+        model = settings.GROQ_MODEL
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        request_body = {
+            "model": model,
+            "max_tokens": 1024,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_message}
+            ],
+            "response_format": {"type": "json_object"}
+        }
+    else:
+        raise PermanentAIError(AIErrorCategory.UNKNOWN, f"Unsupported AI provider: {provider}")
 
     try:
         async with httpx.AsyncClient(timeout=settings.AI_TIMEOUT_SECONDS) as client:
-            response = await client.post(ANTHROPIC_API_URL, json=request_body, headers=headers)
+            response = await client.post(url, json=request_body, headers=headers)
 
         status = response.status_code
 
         if status == 429:
             raise RetryableAIError(
                 AIErrorCategory.RATE_LIMIT,
-                f"Claude API rate-limited (429): {response.text[:200]}",
+                f"{provider.upper()} API rate-limited (429): {response.text[:200]}",
             )
         if status >= 500:
             raise RetryableAIError(
                 AIErrorCategory.SERVER_ERROR,
-                f"Claude API server error ({status}): {response.text[:200]}",
+                f"{provider.upper()} API server error ({status}): {response.text[:200]}",
             )
         if status >= 400:
             raise PermanentAIError(
                 AIErrorCategory.UNKNOWN,
-                f"Claude API client error ({status}): {response.text[:200]}",
+                f"{provider.upper()} API client error ({status}): {response.text[:200]}",
             )
 
-        raw_text = _extract_text(response.json())
-        logger.debug("AI raw response: %.300s", raw_text)
+        resp_json = response.json()
+        raw_text = _extract_text_openai_style(resp_json)
+        
+        logger.debug("Raw AI response: %.1000s", raw_text)
+
+        if not raw_text or not raw_text.strip():
+            raise RetryableAIError(
+                AIErrorCategory.PARSE_ERROR,
+                "AI response was completely empty."
+            )
 
     except httpx.TimeoutException as exc:
         raise RetryableAIError(AIErrorCategory.TIMEOUT, f"Request timed out: {exc}") from exc
     except httpx.RequestError as exc:
         raise RetryableAIError(AIErrorCategory.NETWORK, f"Network error: {exc}") from exc
 
-    # --- Parse JSON ---
+    # --- Parse JSON (Safe Retryable Wrapper) ---
     try:
         parsed = json.loads(raw_text)
     except json.JSONDecodeError as exc:
-        raise PermanentAIError(
+        # Invalid JSON is now considered a retryable error
+        raise RetryableAIError(
             AIErrorCategory.PARSE_ERROR,
             f"AI response is not valid JSON: {exc}",
         ) from exc
@@ -174,14 +195,20 @@ async def _call_claude_once(api_key: str, raw_json: dict) -> StandardEvent:
 
 async def map_webhook_to_standard(raw_json: dict) -> StandardEvent:
     """
-    Normalize a raw webhook payload to ``StandardEvent`` via Claude AI.
+    Normalize a raw webhook payload to ``StandardEvent`` via configuring AI Provider.
 
     * Retries transient errors with exponential back-off (tenacity).
     * Falls back to a safe ``UNKNOWN`` event on permanent or exhausted failures.
     """
-    api_key = settings.ANTHROPIC_API_KEY
-    if not api_key:
-        logger.error("ANTHROPIC_API_KEY not set — using fallback mapping.")
+    provider = settings.AI_PROVIDER.lower()
+    
+    if provider == "groq":
+        api_key = settings.GROQ_API_KEY
+        if not api_key:
+            logger.error(f"{provider.upper()}_API_KEY not set — using fallback mapping.")
+            return _build_fallback(raw_json)
+    else:
+        logger.error(f"Unsupported AI provider: {provider} — using fallback mapping.")
         return _build_fallback(raw_json)
 
     result: StandardEvent | None = None
@@ -199,7 +226,7 @@ async def map_webhook_to_standard(raw_json: dict) -> StandardEvent:
                     logger.info(
                         "AI mapper retry %d/%d", attempt_num, settings.AI_MAX_RETRIES
                     )
-                result = await _call_claude_once(api_key, raw_json)
+                result = await _call_ai_once(provider, api_key, raw_json)
 
     except RetryableAIError as exc:
         logger.error(
@@ -219,16 +246,15 @@ async def map_webhook_to_standard(raw_json: dict) -> StandardEvent:
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _extract_text(api_response: dict) -> str:
-    """Pull the text string out of Claude's content block array."""
-    for block in api_response.get("content", []):
-        if block.get("type") == "text":
-            return block["text"].strip()
-    raise PermanentAIError(
-        AIErrorCategory.PARSE_ERROR,
-        "No text block found in Claude API response.",
-    )
-
+def _extract_text_openai_style(api_response: dict) -> str:
+    """Pull the text string out of an OpenAI-compatible API response (like Groq)."""
+    try:
+        return api_response["choices"][0]["message"]["content"].strip()
+    except (KeyError, IndexError, TypeError) as exc:
+        raise RetryableAIError(
+            AIErrorCategory.PARSE_ERROR,
+            f"Failed to extract text from AI response structure: {exc}",
+        )
 
 def _build_fallback(raw_json: dict) -> StandardEvent:
     """Return a safe fallback ``StandardEvent`` when AI mapping fails."""

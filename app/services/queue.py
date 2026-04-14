@@ -124,13 +124,47 @@ async def _process_job(job: _Job) -> None:
 
         try:
             event = await map_webhook_to_standard(raw_payload)
-            webhook.normalized_payload = json.dumps(event.model_dump())
+            payload_str = json.dumps(event.model_dump())
+            webhook.normalized_payload = payload_str
             webhook.confidence = event.confidence
             webhook.status = "processed"
             webhook.error_detail = None
+            
+            # --- Outbound Delivery ---
+            if settings.OUTBOUND_TARGET_URL:
+                webhook.outbound_status = "pending"
+                await db.commit() # Save normalized state before outbound attempt
+                
+                logger.info(f"Queue: attempting outbound delivery for webhook id={webhook_id} to {settings.OUTBOUND_TARGET_URL}")
+                try:
+                    # Simple inline retry for outbound delivery
+                    import httpx
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        # try up to OUTBOUND_MAX_RETRIES 
+                        for ob_attempt in range(settings.OUTBOUND_MAX_RETRIES):
+                            try:
+                                resp = await client.post(
+                                    settings.OUTBOUND_TARGET_URL, 
+                                    json={"event": event.model_dump(), "original_id": webhook.request_id}
+                                )
+                                resp.raise_for_status()
+                                webhook.outbound_status = "delivered"
+                                webhook.outbound_error = None
+                                logger.info(f"Queue: outbound delivery successful for webhook id={webhook_id}")
+                                break # Success
+                            except httpx.HTTPError as h_err:
+                                if ob_attempt == settings.OUTBOUND_MAX_RETRIES - 1:
+                                    raise h_err
+                                await asyncio.sleep(2 * (ob_attempt + 1)) # Simple backoff
+                                
+                except Exception as ob_exc:
+                    logger.error(f"Queue: outbound delivery failed for webhook id={webhook_id}: {ob_exc}")
+                    webhook.outbound_status = "delivery_failed"
+                    webhook.outbound_error = str(ob_exc)
+            
             await db.commit()
             logger.info(
-                "Queue: processed webhook id=%d event_type=%s confidence=%.2f",
+                "Queue: completed processing webhook id=%d event_type=%s confidence=%.2f",
                 webhook_id,
                 event.event_type,
                 event.confidence,

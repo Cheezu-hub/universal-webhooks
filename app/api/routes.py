@@ -138,6 +138,8 @@ async def get_webhook(request_id: str, db: AsyncSession = Depends(get_db)) -> We
         normalized_payload=normalized,
         retry_count=webhook.retry_count,
         error_detail=webhook.error_detail,
+        outbound_status=webhook.outbound_status,
+        outbound_error=webhook.outbound_error,
         created_at=webhook.created_at,
         updated_at=webhook.updated_at,
     )
@@ -178,6 +180,8 @@ async def list_webhooks(limit: int = 20, db: AsyncSession = Depends(get_db)) -> 
                 normalized_payload=normalized,
                 retry_count=wh.retry_count,
                 error_detail=wh.error_detail,
+                outbound_status=wh.outbound_status,
+                outbound_error=wh.outbound_error,
                 created_at=wh.created_at,
                 updated_at=wh.updated_at,
             )
@@ -238,3 +242,64 @@ async def system_status(db: AsyncSession = Depends(get_db)) -> dict:
         "failed": counts.get("failed", 0),
         "total": sum(counts.values())
     }
+
+@router.post("/api/webhooks/simulate", response_model=WebhookResponse)
+async def simulate_webhook(
+    provider: str = "stripe",
+    db: AsyncSession = Depends(get_db)
+) -> WebhookResponse:
+    """Trigger a simulated mock webhook for testing."""
+    import time
+    request_id = str(uuid.uuid4())
+    
+    if provider.lower() == "github":
+        raw_payload = {
+            "ref": "refs/heads/main",
+            "repository": {"name": "universal-webhooks", "full_name": "Cheezu-hub/universal-webhooks"},
+            "pusher": {"name": "Cheezu", "email": "cheezu@example.com"},
+            "commits": [{"id": "a1b2c3d4", "message": "Demo commit for hackathon", "timestamp": time.time()}]
+        }
+        prov = "github"
+    else:
+        # Default to Stripe mock
+        raw_payload = {
+            "id": f"evt_test_{uuid.uuid4().hex[:8]}",
+            "object": "event",
+            "type": "payment_intent.succeeded",
+            "created": int(time.time()),
+            "data": {
+                "object": {
+                    "id": f"pi_test_{uuid.uuid4().hex[:8]}",
+                    "amount": 2500,
+                    "currency": "usd",
+                    "status": "succeeded",
+                    "receipt_email": "demo@hackathon.com"
+                }
+            }
+        }
+        prov = "stripe"
+
+    webhook = Webhook(
+        request_id=request_id,
+        idempotency_key=f"sim_{request_id}",
+        provider=prov,
+        headers=json.dumps({"x-simulated": "true"}),
+        raw_payload=json.dumps(raw_payload),
+        status="queued",
+    )
+    db.add(webhook)
+    await db.commit()
+    await db.refresh(webhook)
+    
+    accepted = await enqueue_webhook(webhook.id, raw_payload)
+    if not accepted:
+        webhook.status = "failed"
+        webhook.error_detail = "Processing queue full."
+        await db.commit()
+        raise HTTPException(status_code=503, detail="Queue is full.")
+
+    return WebhookResponse(
+        request_id=request_id,
+        status="queued",
+        message=f"Simulated {prov} webhook created and queued.",
+    )

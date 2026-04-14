@@ -53,10 +53,12 @@ app = FastAPI(
     title="Universal Webhook Adapter",
     description=(
         "Accepts any webhook payload, verifies its signature, deduplicates it, "
-        "and normalises it into a standard schema via Claude AI."
+        "and normalises it into a standard schema via Groq AI."
     ),
     version="2.0.0",
     lifespan=lifespan,
+    docs_url=None,   # Disable Swagger UI — use custom dashboard at /
+    redoc_url=None,  # Disable ReDoc
 )
 
 # --- Rate limiting ---

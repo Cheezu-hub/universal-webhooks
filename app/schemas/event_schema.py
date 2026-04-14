@@ -41,6 +41,8 @@ class WebhookRecord(BaseModel):
     normalized_payload: dict | None
     retry_count: int
     error_detail: str | None
+    outbound_status: str | None = None
+    outbound_error: str | None = None
     created_at: datetime
     updated_at: datetime
 

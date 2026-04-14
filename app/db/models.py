@@ -43,10 +43,17 @@ class Webhook(Base):
     # --- State ---
     status: Mapped[str] = mapped_column(
         String(20), default="received",
-        # received | queued | processing | processed | failed
+        # received | queued | processing | processed | failed | delivered | delivery_failed
     )
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
     error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # --- Outbound Delivery ---
+    outbound_status: Mapped[str | None] = mapped_column(
+        String(20), nullable=True
+        # pending | delivered | failed
+    )
+    outbound_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # --- Timestamps ---
     created_at: Mapped[datetime] = mapped_column(

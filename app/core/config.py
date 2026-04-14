@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     AI_TIMEOUT_SECONDS: float = 10.0
     AI_MAX_RETRIES: int = 3              # API-level retries (tenacity)
 
+    # --- Outbound Delivery ---
+    OUTBOUND_TARGET_URL: str = ""        # Where to POST the normalized payload
+    OUTBOUND_MAX_RETRIES: int = 3        # Number of retries for outbound POST
+
     # --- Misc ---
     LOG_LEVEL: str = "INFO"
 

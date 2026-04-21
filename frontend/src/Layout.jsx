@@ -5,10 +5,21 @@ import { Toaster } from 'react-hot-toast';
 
 const Layout = () => {
   return (
-    <div className="flex bg-gray-50 h-screen overflow-hidden text-gray-900">
-      <Toaster position="top-right" />
+    <div className="app-shell">
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          style: {
+            background: '#1e2535',
+            color: '#f1f5f9',
+            border: '1px solid #252d3d',
+            borderRadius: '10px',
+            fontSize: '13px',
+          },
+        }}
+      />
       <Sidebar />
-      <div className="flex-1 h-screen overflow-hidden">
+      <div style={{ flex: 1, height: '100vh', overflow: 'hidden', display: 'flex' }}>
         <Outlet />
       </div>
     </div>

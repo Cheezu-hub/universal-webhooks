@@ -1,9 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import WebhookTable from '../components/WebhookTable';
 import WebhookDetails from '../components/WebhookDetails';
 import SimulateModal from '../components/SimulateModal';
-import { getWebhooks, getSystemStatus } from '../services/api';
+import { getWebhooks, getSystemStatus, SSE_URL } from '../services/api';
 import toast from 'react-hot-toast';
+import { Activity, CheckCircle, XCircle, Layers, Wifi, WifiOff } from 'lucide-react';
+
+const StatCard = ({ label, value, icon: Icon, color, subtext }) => (
+  <div className="stat-card">
+    <div className="stat-card-inner">
+      <div className="stat-icon" style={{ background: `${color}18`, color }}>
+        <Icon size={20} />
+      </div>
+      <div className="stat-content">
+        <dt className="stat-label">{label}</dt>
+        <dd className="stat-value" style={{ color }}>{value}</dd>
+        {subtext && <p className="stat-subtext">{subtext}</p>}
+      </div>
+    </div>
+  </div>
+);
 
 const Dashboard = () => {
   const [webhooks, setWebhooks] = useState([]);
@@ -11,111 +27,179 @@ const Dashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedWebhook, setSelectedWebhook] = useState(null);
   const [isSimulateModalOpen, setIsSimulateModalOpen] = useState(false);
+  const [isLive, setIsLive] = useState(false);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    fetchData();
-    // Poll every 3 seconds for Hackathon MVP
-    const intervalId = setInterval(fetchData, 3000);
-    return () => clearInterval(intervalId);
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [webhooksData, statusData] = await Promise.all([
         getWebhooks(),
         getSystemStatus()
       ]);
-      setWebhooks(Array.isArray(webhooksData) ? webhooksData : webhooksData.items || webhooksData.data || []);
+      setWebhooks(Array.isArray(webhooksData) ? webhooksData : []);
       setStatus(statusData);
-    } catch (error) {
-      console.error(error);
+      setError(null);
+    } catch (err) {
+      console.error(err);
+      setError('Failed to connect to the backend. Is it running?');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const successRate = status.total > 0 
-    ? Math.round((status.processed / status.total) * 100) 
+  // Initial load
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // SSE real-time updates — replaces the setInterval polling
+  useEffect(() => {
+    let es;
+    let retryTimeout;
+
+    const connect = () => {
+      es = new EventSource(SSE_URL);
+
+      es.onopen = () => {
+        setIsLive(true);
+        setError(null);
+      };
+
+      es.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.type === 'webhook_update' || msg.type === 'webhook_received') {
+            // Pull fresh data when any webhook changes
+            fetchData();
+          }
+        } catch (_) {}
+      };
+
+      es.onerror = () => {
+        setIsLive(false);
+        es.close();
+        // Reconnect after 3 seconds
+        retryTimeout = setTimeout(connect, 3000);
+      };
+    };
+
+    connect();
+    return () => {
+      if (es) es.close();
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
+  }, [fetchData]);
+
+  const successRate = status.total > 0
+    ? Math.round((status.processed / status.total) * 100)
     : 0;
 
   return (
-    <div className="h-full flex flex-col lg:flex-row overflow-hidden">
+    <div className="dashboard-root">
       {/* Main Content Area */}
-      <div className={`h-full flex flex-col overflow-y-auto transition-all duration-300 ${selectedWebhook ? 'lg:w-1/2' : 'w-full'}`}>
-        <div className="p-8">
-          <div className="md:flex md:items-center md:justify-between mb-6">
-            <div className="min-w-0 flex-1">
-              <h2 className="text-2xl font-bold leading-7 text-gray-900 sm:truncate sm:text-3xl sm:tracking-tight">
+      <div className={`dashboard-main ${selectedWebhook ? 'split' : ''}`}>
+        <div className="dashboard-inner">
+
+          {/* Header */}
+          <div className="dashboard-header">
+            <div>
+              <h1 className="dashboard-title">
+                <Activity className="dashboard-title-icon" size={26} />
                 Universal Adapter Hub
-              </h2>
-              <p className="mt-1 text-sm text-gray-500">
+              </h1>
+              <p className="dashboard-subtitle">
                 Monitor live webhooks, AI normalization, and outbound delivery.
               </p>
             </div>
-            <div className="mt-4 flex md:ml-4 md:mt-0 space-x-3">
+            <div className="dashboard-header-actions">
+              <span className={`live-badge ${isLive ? 'live' : 'offline'}`}>
+                {isLive ? <Wifi size={12} /> : <WifiOff size={12} />}
+                {isLive ? 'Live' : 'Offline'}
+              </span>
               <button
-                type="button"
+                id="simulate-btn"
                 onClick={() => setIsSimulateModalOpen(true)}
-                className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-colors"
+                className="btn-primary"
               >
-                Mock Webhook
+                + Simulate Webhook
               </button>
             </div>
           </div>
 
-          {/* Analytics Cards */}
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-4 mb-8">
-            <div className="overflow-hidden rounded-lg bg-white px-4 py-5 shadow sm:p-6 border border-gray-100">
-              <dt className="truncate text-sm font-medium text-gray-500">Total Processed</dt>
-              <dd className="mt-1 text-3xl font-semibold tracking-tight text-gray-900">{status.total}</dd>
+          {/* Error Banner */}
+          {error && (
+            <div className="error-banner">
+              <XCircle size={16} />
+              {error}
             </div>
-            <div className="overflow-hidden rounded-lg bg-white px-4 py-5 shadow sm:p-6 border border-gray-100">
-              <dt className="truncate text-sm font-medium text-gray-500">Success Rate</dt>
-              <dd className="mt-1 text-3xl font-semibold tracking-tight text-indigo-600">{successRate}%</dd>
-            </div>
-            <div className="overflow-hidden rounded-lg bg-white px-4 py-5 shadow sm:p-6 border border-gray-100">
-              <dt className="truncate text-sm font-medium text-gray-500">Failed</dt>
-              <dd className="mt-1 text-3xl font-semibold tracking-tight text-red-600">{status.failed}</dd>
-            </div>
-            <div className="overflow-hidden rounded-lg bg-white px-4 py-5 shadow sm:p-6 border border-gray-100">
-              <dt className="truncate text-sm font-medium text-gray-500">Queue Depth</dt>
-              <dd className="mt-1 text-3xl font-semibold tracking-tight text-amber-500">{status.queue_size}</dd>
-            </div>
+          )}
+
+          {/* Stats Cards */}
+          <div className="stats-grid">
+            <StatCard
+              label="Total Webhooks"
+              value={status.total}
+              icon={Layers}
+              color="#6366f1"
+              subtext="All time"
+            />
+            <StatCard
+              label="Success Rate"
+              value={`${successRate}%`}
+              icon={CheckCircle}
+              color="#10b981"
+              subtext={`${status.processed} processed`}
+            />
+            <StatCard
+              label="Failed"
+              value={status.failed}
+              icon={XCircle}
+              color="#ef4444"
+              subtext="Exhausted retries"
+            />
+            <StatCard
+              label="Queue Depth"
+              value={status.queue_size}
+              icon={Activity}
+              color="#f59e0b"
+              subtext="Pending jobs"
+            />
           </div>
-          
-          <WebhookTable 
-            data={webhooks} 
-            isLoading={isLoading} 
-            selectedId={selectedWebhook?.id}
-            onRowClick={(webhook) => setSelectedWebhook(webhook)} 
+
+          {/* Webhook Table */}
+          <WebhookTable
+            data={webhooks}
+            isLoading={isLoading}
+            selectedId={selectedWebhook?.request_id}
+            onRowClick={(webhook) => setSelectedWebhook(webhook)}
           />
         </div>
       </div>
 
-      {/* Slide-over/Split Details Panel */}
+      {/* Split Details Panel (desktop) */}
       {selectedWebhook && (
-        <div className="hidden lg:block lg:w-1/2 h-full z-10">
-          <WebhookDetails 
-            webhookId={selectedWebhook.id} 
-            onClose={() => setSelectedWebhook(null)} 
+        <div className="details-panel">
+          <WebhookDetails
+            webhookId={selectedWebhook.request_id}
+            onClose={() => setSelectedWebhook(null)}
           />
         </div>
       )}
-      
+
       {/* Mobile Modal for Details */}
       {selectedWebhook && (
-        <div className="lg:hidden fixed inset-0 z-50 bg-gray-900/50 flex flex-col justify-end">
-          <div className="bg-white h-[90vh] rounded-t-2xl shadow-xl w-full flex flex-col overflow-hidden animate-slide-up">
-            <WebhookDetails 
-              webhookId={selectedWebhook.id} 
-              onClose={() => setSelectedWebhook(null)} 
+        <div className="mobile-details-overlay" onClick={() => setSelectedWebhook(null)}>
+          <div className="mobile-details-sheet" onClick={e => e.stopPropagation()}>
+            <WebhookDetails
+              webhookId={selectedWebhook.request_id}
+              onClose={() => setSelectedWebhook(null)}
             />
           </div>
         </div>
       )}
 
       {/* Simulate Modal */}
-      <SimulateModal 
+      <SimulateModal
         isOpen={isSimulateModalOpen}
         onClose={() => setIsSimulateModalOpen(false)}
         onSimulateSuccess={fetchData}

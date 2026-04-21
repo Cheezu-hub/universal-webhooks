@@ -18,10 +18,12 @@ GET /health
 
 import json
 import logging
+import time
 import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +34,7 @@ from app.db.models import Webhook
 from app.schemas.event_schema import WebhookRecord, WebhookResponse
 from app.services.idempotency import extract_idempotency_key, find_duplicate
 from app.services.queue import enqueue_webhook, get_queue_size
+from app.services.broadcaster import broadcaster
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -224,6 +227,73 @@ async def replay_webhook(request_id: str, db: AsyncSession = Depends(get_db)) ->
     )
 
 
+# ---------------------------------------------------------------------------
+# GET /api/events/stream  — Server-Sent Events
+# ---------------------------------------------------------------------------
+
+@router.get("/api/events/stream")
+async def events_stream(request: Request):
+    """SSE endpoint — push live webhook updates to the dashboard."""
+    async def _generator():
+        async for chunk in broadcaster.subscribe():
+            if await request.is_disconnected():
+                break
+            yield chunk
+
+    return StreamingResponse(
+        _generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/simulate  — flexible custom-JSON simulation
+# ---------------------------------------------------------------------------
+
+@router.post("/api/v1/simulate", response_model=WebhookResponse)
+async def simulate_custom(
+    payload: dict,
+    provider: str = "custom",
+    db: AsyncSession = Depends(get_db),
+) -> WebhookResponse:
+    """Simulate any arbitrary JSON as a webhook (for the Custom JSON tab)."""
+    request_id = str(uuid.uuid4())
+    webhook = Webhook(
+        request_id=request_id,
+        idempotency_key=f"custom_{request_id}",
+        provider=provider,
+        headers=json.dumps({"x-simulated": "true", "x-provider": provider}),
+        raw_payload=json.dumps(payload),
+        status="queued",
+    )
+    db.add(webhook)
+    await db.commit()
+    await db.refresh(webhook)
+
+    accepted = await enqueue_webhook(webhook.id, payload)
+    if not accepted:
+        webhook.status = "failed"
+        await db.commit()
+        raise HTTPException(status_code=503, detail="Queue is full.")
+
+    await broadcaster.publish({
+        "type": "webhook_received",
+        "request_id": request_id,
+        "provider": provider,
+        "status": "queued",
+    })
+
+    return WebhookResponse(
+        request_id=request_id,
+        status="queued",
+        message=f"Custom '{provider}' webhook created and queued.",
+    )
+
+
 @router.get("/api/system/status")
 async def system_status(db: AsyncSession = Depends(get_db)) -> dict:
     """Return metrics for the frontend Dashboard."""
@@ -257,9 +327,29 @@ async def simulate_webhook(
             "ref": "refs/heads/main",
             "repository": {"name": "universal-webhooks", "full_name": "Cheezu-hub/universal-webhooks"},
             "pusher": {"name": "Cheezu", "email": "cheezu@example.com"},
-            "commits": [{"id": "a1b2c3d4", "message": "Demo commit for hackathon", "timestamp": time.time()}]
+            "commits": [{"id": "a1b2c3d4", "message": "Demo commit for simulation", "timestamp": time.time()}]
         }
         prov = "github"
+    elif provider.lower() == "shopify":
+        raw_payload = {
+            "id": int(time.time() * 1000),
+            "email": "customer@demo.com",
+            "financial_status": "paid",
+            "fulfillment_status": None,
+            "total_price": "99.99",
+            "currency": "USD",
+            "line_items": [
+                {"title": "Demo Product", "quantity": 1, "price": "99.99"}
+            ],
+            "shipping_address": {
+                "first_name": "Jane",
+                "last_name": "Doe",
+                "city": "New York",
+                "country": "US"
+            },
+            "created_at": f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}"
+        }
+        prov = "shopify"
     else:
         # Default to Stripe mock
         raw_payload = {

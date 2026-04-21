@@ -35,4 +35,11 @@ export const simulateWebhook = async (provider = 'stripe') => {
   return response.data;
 };
 
+export const simulateCustom = async (payload, provider = 'custom') => {
+  const response = await api.post(`/api/v1/simulate?provider=${provider}`, payload);
+  return response.data;
+};
+
+export const SSE_URL = `${baseURL}/api/events/stream`;
+
 export default api;

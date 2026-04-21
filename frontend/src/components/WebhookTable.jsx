@@ -1,67 +1,71 @@
 import React from 'react';
 import StatusBadge from './StatusBadge';
-import { cn } from '../utils/cn';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Inbox } from 'lucide-react';
+
+const SkeletonRow = () => (
+  <div className="skeleton-row">
+    <div className="skeleton" style={{ height: 14 }} />
+    <div className="skeleton" style={{ height: 22, width: 80 }} />
+    <div className="skeleton" style={{ height: 22, width: 80 }} />
+    <div className="skeleton" style={{ height: 14, width: 120 }} />
+    <div />
+  </div>
+);
 
 const WebhookTable = ({ data, onRowClick, selectedId, isLoading }) => {
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-      </div>
-    );
-  }
-
-  if (!data || data.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center p-12 text-center border-2 border-dashed border-gray-200 rounded-xl bg-gray-50 h-64">
-        <h3 className="mt-2 text-sm font-semibold text-gray-900">No webhooks yet</h3>
-        <p className="mt-1 text-sm text-gray-500">Waiting for incoming webhooks...</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 rounded-xl">
-      <table className="min-w-full divide-y divide-gray-300">
-        <thead className="bg-gray-50">
-          <tr>
-            <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">ID</th>
-            <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">AI Status</th>
-            <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Delivery</th>
-            <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Timestamp</th>
-            <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6"><span className="sr-only">Details</span></th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-200 bg-white">
-          {data.map((webhook) => (
-            <tr 
-              key={webhook.request_id} 
-              onClick={() => onRowClick(webhook)}
-              className={cn(
-                "cursor-pointer transition-colors duration-150 hover:bg-indigo-50/60",
-                selectedId === webhook.request_id && "bg-indigo-50 border-l-4 border-indigo-500"
-              )}
-            >
-              <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
-                <span className="font-mono text-xs">{webhook.request_id.substring(0, 15)}...</span>
-              </td>
-              <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                <StatusBadge status={webhook.status} />
-              </td>
-              <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                {webhook.outbound_status ? <StatusBadge status={webhook.outbound_status} /> : <span className="text-gray-400">-</span>}
-              </td>
-              <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                {new Date(webhook.timestamp || webhook.created_at).toLocaleString()}
-              </td>
-              <td className="whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
-                 <ChevronRight className="w-5 h-5 text-gray-400 inline-block" />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="table-container">
+      {/* Header */}
+      <div className="table-header-row">
+        <span>Request ID</span>
+        <span>AI Status</span>
+        <span>Delivery</span>
+        <span>Timestamp</span>
+        <span />
+      </div>
+
+      {/* Loading skeletons */}
+      {isLoading && (
+        <>
+          {[...Array(5)].map((_, i) => <SkeletonRow key={i} />)}
+        </>
+      )}
+
+      {/* Empty state */}
+      {!isLoading && (!data || data.length === 0) && (
+        <div className="empty-state">
+          <div className="empty-state-icon"><Inbox size={40} /></div>
+          <h3>No webhooks yet</h3>
+          <p>Use the Simulation Hub to fire a test webhook, or send one to the endpoint.</p>
+        </div>
+      )}
+
+      {/* Rows */}
+      {!isLoading && data && data.map((webhook) => (
+        <div
+          key={webhook.request_id}
+          className={`table-row ${selectedId === webhook.request_id ? 'selected' : ''}`}
+          onClick={() => onRowClick(webhook)}
+        >
+          <span className="table-cell-id">{webhook.request_id?.substring(0, 18)}…</span>
+          <span><StatusBadge status={webhook.status} /></span>
+          <span>
+            {webhook.outbound_status
+              ? <StatusBadge status={webhook.outbound_status} />
+              : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
+            }
+          </span>
+          <span className="table-cell">
+            {new Date(webhook.created_at).toLocaleString(undefined, {
+              month: 'short', day: 'numeric',
+              hour: '2-digit', minute: '2-digit', second: '2-digit'
+            })}
+          </span>
+          <span style={{ display: 'flex', justifyContent: 'center', color: 'var(--text-muted)' }}>
+            <ChevronRight size={16} />
+          </span>
+        </div>
+      ))}
     </div>
   );
 };

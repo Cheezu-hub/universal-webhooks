@@ -1,70 +1,152 @@
 import React, { useState } from 'react';
-import { simulateWebhook } from '../services/api';
+import { simulateWebhook, simulateCustom } from '../services/api';
 import toast from 'react-hot-toast';
+import { X, Zap, GitBranch, ShoppingBag, Code2, ChevronRight } from 'lucide-react';
+
+const TABS = [
+  { id: 'stripe',   label: 'Stripe',   icon: Zap },
+  { id: 'github',   label: 'GitHub',   icon: GitBranch },
+  { id: 'shopify',  label: 'Shopify',  icon: ShoppingBag },
+  { id: 'custom',   label: 'Custom',   icon: Code2 },
+];
+
+const DEFAULT_CUSTOM = JSON.stringify({
+  event: "order.placed",
+  source: "my-app",
+  timestamp: new Date().toISOString(),
+  data: {
+    order_id: "ORD-12345",
+    customer: "rajan@example.com",
+    total: 99.99,
+    currency: "USD"
+  }
+}, null, 2);
 
 const SimulateModal = ({ isOpen, onClose, onSimulateSuccess }) => {
-  const [isDeploying, setIsDeploying] = useState(false);
+  const [activeTab, setActiveTab] = useState('stripe');
+  const [isLoading, setIsLoading] = useState(false);
+  const [customJson, setCustomJson] = useState(DEFAULT_CUSTOM);
+  const [jsonError, setJsonError] = useState(null);
 
   if (!isOpen) return null;
 
-  const handleSimulate = async (provider) => {
-    setIsDeploying(true);
+  const handlePreset = async (provider) => {
+    setIsLoading(true);
     try {
       await simulateWebhook(provider);
-      toast.success(`${provider} webhook mock scheduled!`);
+      toast.success(`${provider.charAt(0).toUpperCase() + provider.slice(1)} webhook fired!`, {
+        icon: '⚡',
+        style: { borderRadius: '10px', background: '#1e293b', color: '#f1f5f9' }
+      });
       onSimulateSuccess();
       onClose();
-    } catch (error) {
-      toast.error('Simulation failed.');
+    } catch {
+      toast.error('Simulation failed. Is the backend running?');
     } finally {
-      setIsDeploying(false);
+      setIsLoading(false);
     }
   };
 
+  const handleCustomSend = async () => {
+    setJsonError(null);
+    let parsed;
+    try {
+      parsed = JSON.parse(customJson);
+    } catch (e) {
+      setJsonError(`Invalid JSON: ${e.message}`);
+      return;
+    }
+    setIsLoading(true);
+    try {
+      await simulateCustom(parsed, 'custom');
+      toast.success('Custom webhook fired!', {
+        icon: '🚀',
+        style: { borderRadius: '10px', background: '#1e293b', color: '#f1f5f9' }
+      });
+      onSimulateSuccess();
+      onClose();
+    } catch {
+      toast.error('Custom simulation failed.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const presetDescriptions = {
+    stripe: { title: 'Payment Succeeded', desc: 'Simulates a Stripe payment_intent.succeeded event with a $25 charge.', action: () => handlePreset('stripe') },
+    github: { title: 'Push Event',         desc: 'Simulates a GitHub push to the main branch with a demo commit.',        action: () => handlePreset('github') },
+    shopify: { title: 'Order Placed',      desc: 'Simulates a Shopify order.created event for a $99.99 purchase.',        action: () => handlePreset('shopify') },
+  };
+
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-      <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        
-        {/* Background overlay */}
-        <div className="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity" aria-hidden="true" onClick={onClose}></div>
-
-        <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-
-        <div className="inline-block align-bottom bg-gray-900 rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-sm sm:w-full sm:p-6 border border-gray-800">
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="modal-header">
           <div>
-            <div className="mt-3 text-center sm:mt-5">
-              <h3 className="text-lg leading-6 font-medium text-white" id="modal-title">
-                Simulate Webhook
-              </h3>
-              <div className="mt-2">
-                <p className="text-sm text-gray-400">
-                  Fire a mock webhook to test the normalization engine instantly.
-                </p>
-              </div>
+            <h2 className="modal-title">Simulation Hub</h2>
+            <p className="modal-subtitle">Fire a test webhook to see the AI normalization pipeline in action.</p>
+          </div>
+          <button className="modal-close-btn" onClick={onClose}><X size={18} /></button>
+        </div>
+
+        {/* Tabs */}
+        <div className="modal-tabs">
+          {TABS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              className={`modal-tab ${activeTab === id ? 'active' : ''}`}
+              onClick={() => setActiveTab(id)}
+            >
+              <Icon size={14} />
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Body */}
+        <div className="modal-body">
+          {activeTab === 'custom' ? (
+            <div className="custom-json-panel">
+              <label className="json-label">JSON Payload</label>
+              <textarea
+                className={`json-editor ${jsonError ? 'json-error-border' : ''}`}
+                value={customJson}
+                onChange={e => { setCustomJson(e.target.value); setJsonError(null); }}
+                spellCheck={false}
+                rows={12}
+              />
+              {jsonError && <p className="json-error-msg">{jsonError}</p>}
+              <button
+                className="btn-primary w-full mt-4"
+                onClick={handleCustomSend}
+                disabled={isLoading}
+              >
+                {isLoading ? 'Sending…' : 'Send Custom Webhook'}
+                <ChevronRight size={16} />
+              </button>
             </div>
-          </div>
-          <div className="mt-5 sm:mt-6 space-y-3">
-            <button
-              onClick={() => handleSimulate('stripe')}
-              disabled={isDeploying}
-              className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-[#635BFF] hover:bg-[#4b45cf] text-base font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#635BFF] sm:text-sm transition-colors"
-            >
-              Payment Succeeded (Stripe)
-            </button>
-            <button
-              onClick={() => handleSimulate('github')}
-              disabled={isDeploying}
-              className="w-full inline-flex justify-center rounded-md border border-gray-700 shadow-sm px-4 py-2 bg-gray-800 hover:bg-gray-700 text-base font-medium text-white hover:text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 sm:text-sm transition-colors"
-            >
-              Push Event (GitHub)
-            </button>
-            <button
-              onClick={onClose}
-              className="mt-4 w-full inline-flex justify-center rounded-md border border-gray-700 shadow-sm px-4 py-2 bg-transparent text-base font-medium text-gray-300 hover:text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 sm:text-sm transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
+          ) : (
+            <div className="preset-panel">
+              {Object.keys(presetDescriptions).filter(k => k === activeTab).map(key => {
+                const p = presetDescriptions[key];
+                return (
+                  <div key={key} className="preset-card">
+                    <h3 className="preset-title">{p.title}</h3>
+                    <p className="preset-desc">{p.desc}</p>
+                    <button
+                      className="btn-primary w-full"
+                      onClick={p.action}
+                      disabled={isLoading}
+                    >
+                      {isLoading ? 'Sending…' : `Fire ${p.title}`}
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>

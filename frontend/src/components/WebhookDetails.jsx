@@ -1,8 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import JSONViewer from './JSONViewer';
-import { X, RefreshCw } from 'lucide-react';
+import StatusBadge from './StatusBadge';
+import { X, RefreshCw, AlertTriangle } from 'lucide-react';
 import { getWebhookDetails, replayWebhook } from '../services/api';
 import toast from 'react-hot-toast';
+
+const JSONBlock = ({ title, data }) => {
+  const text = data
+    ? JSON.stringify(data, null, 2)
+    : 'No data available.';
+  return (
+    <div className="json-viewer-container">
+      <div className="json-viewer-title">{title}</div>
+      <pre className="json-viewer-content">{text}</pre>
+    </div>
+  );
+};
 
 const WebhookDetails = ({ webhookId, onClose }) => {
   const [details, setDetails] = useState(null);
@@ -10,19 +22,15 @@ const WebhookDetails = ({ webhookId, onClose }) => {
   const [isReplaying, setIsReplaying] = useState(false);
 
   useEffect(() => {
-    if (webhookId) {
-      fetchDetails();
-    }
+    if (webhookId) fetchDetails();
   }, [webhookId]);
 
   const fetchDetails = async () => {
     setIsLoading(true);
     try {
-      const data = await getWebhookDetails(webhookId);
-      setDetails(data);
-    } catch (error) {
+      setDetails(await getWebhookDetails(webhookId));
+    } catch {
       toast.error('Failed to load webhook details');
-      console.error(error);
     } finally {
       setIsLoading(false);
     }
@@ -30,14 +38,13 @@ const WebhookDetails = ({ webhookId, onClose }) => {
 
   const handleReplay = async () => {
     setIsReplaying(true);
-    const replayToast = toast.loading('Replaying webhook...');
+    const id = toast.loading('Replaying webhook…');
     try {
       await replayWebhook(webhookId);
-      toast.success('Webhook replayed successfully', { id: replayToast });
-      // Optionally refresh here
+      toast.success('Webhook replayed!', { id });
       fetchDetails();
-    } catch (error) {
-      toast.error('Failed to replay webhook', { id: replayToast });
+    } catch {
+      toast.error('Replay failed', { id });
     } finally {
       setIsReplaying(false);
     }
@@ -46,43 +53,74 @@ const WebhookDetails = ({ webhookId, onClose }) => {
   if (!webhookId) return null;
 
   return (
-    <div className="h-full flex flex-col bg-white border-l border-gray-200 shadow-sm w-full">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--surface)' }}>
+      {/* Header */}
+      <div className="details-header">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">Webhook Details</h2>
-          <p className="text-xs font-mono text-gray-500 mt-0.5">{webhookId}</p>
+          <h2>Webhook Details</h2>
+          <p>{webhookId}</p>
         </div>
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={handleReplay}
-            disabled={isReplaying || isLoading}
-            className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none disabled:opacity-50 transition-colors"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${isReplaying ? 'animate-spin' : ''}`} />
-            {isReplaying ? 'Replaying...' : 'Replay'}
-          </button>
-          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-500 hover:bg-gray-100 rounded-lg transition-colors">
-            <X className="w-5 h-5" />
-          </button>
+        <div className="details-actions">
+          {details?.status === 'processed' && (
+            <button className="btn-ghost" onClick={handleReplay} disabled={isReplaying}>
+              <RefreshCw size={12} className={isReplaying ? 'spin' : ''} />
+              {isReplaying ? 'Replaying…' : 'Replay'}
+            </button>
+          )}
+          <button className="btn-icon" onClick={onClose}><X size={17} /></button>
         </div>
       </div>
-      
-      <div className="flex-1 overflow-hidden">
+
+      {/* Body */}
+      <div style={{ flex: 1, overflow: 'hidden' }}>
         {isLoading ? (
-          <div className="flex justify-center items-center h-full">
-             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)' }}>
+            <RefreshCw size={20} style={{ animation: 'spin 1s linear infinite' }} />
           </div>
         ) : details ? (
-          <div className="h-full flex flex-col xl:flex-row p-6 gap-6 bg-gray-50 overflow-y-auto xl:overflow-hidden">
-            <div className="flex-1 h-[500px] xl:h-full min-w-[300px]">
-               <JSONViewer title="Raw JSON Payload" data={details.raw_payload || details.body || details.payload || details} />
+          <div style={{ padding: 16, height: '100%', display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
+            {/* Meta row */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <StatusBadge status={details.status} />
+              {details.provider && (
+                <span style={{
+                  fontSize: 11, padding: '3px 8px', borderRadius: 20,
+                  background: 'var(--border)', color: 'var(--text-dim)', fontWeight: 600
+                }}>
+                  {details.provider}
+                </span>
+              )}
+              {details.confidence != null && (
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  AI confidence: <strong style={{ color: 'var(--text-primary)' }}>{Math.round(details.confidence * 100)}%</strong>
+                </span>
+              )}
             </div>
-            <div className="flex-1 h-[500px] xl:h-full min-w-[300px]">
-               <JSONViewer title="Normalized JSON" data={details.normalized_payload || { message: "No normalized payload available" }} />
+
+            {/* Error detail */}
+            {details.error_detail && (
+              <div style={{
+                display: 'flex', gap: 8, padding: '10px 12px',
+                background: '#ef444412', border: '1px solid #ef444440',
+                borderRadius: 8, fontSize: 12, color: 'var(--danger)'
+              }}>
+                <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                {details.error_detail}
+              </div>
+            )}
+
+            {/* JSON panels */}
+            <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, minHeight: 0 }}>
+              <JSONBlock title="Raw Payload" data={
+                typeof details.normalized_payload?.payload === 'object'
+                  ? details.normalized_payload?.payload
+                  : details
+              } />
+              <JSONBlock title="Normalized" data={details.normalized_payload} />
             </div>
           </div>
         ) : (
-          <div className="flex justify-center items-center h-full text-gray-500 text-sm">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)', fontSize: 13 }}>
             No details available.
           </div>
         )}

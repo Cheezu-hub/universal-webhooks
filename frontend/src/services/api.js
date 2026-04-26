@@ -1,10 +1,10 @@
 import axios from 'axios';
 
 // Get base URL from env, or default to localhost
-const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API = import.meta.env.VITE_API_URL;
 
 const api = axios.create({
-  baseURL,
+  baseURL: API,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -40,6 +40,6 @@ export const simulateCustom = async (payload, provider = 'custom') => {
   return response.data;
 };
 
-export const SSE_URL = `${baseURL}/api/events/stream`;
+export const SSE_URL = `${API}/api/events/stream`;
 
 export default api;

@@ -16,7 +16,7 @@ export const getWebhooks = async () => {
 };
 
 export const getWebhookDetails = async (id) => {
-  const response = await api.get(`/api/webhooks/${id}`);
+  const response = await api.get(`/webhooks/${id}`);
   return response.data;
 };
 

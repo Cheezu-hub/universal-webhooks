@@ -12,10 +12,10 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg:          #0f1117;
-  --surface:     #161b27;
-  --border:      #1e2535;
-  --border-soft: #252d3d;
+  --bg:          #000000;
+  --surface:     #09090b;
+  --border:      #27272a;
+  --border-soft: #3f3f46;
   --text-primary: #f1f5f9;
   --text-muted:   #64748b;
   --text-dim:     #94a3b8;
@@ -657,3 +657,12 @@ html, body, #root {
 }
 
 .btn-icon:hover { background: var(--border); color: var(--text-primary); }
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}

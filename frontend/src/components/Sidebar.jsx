@@ -1,17 +1,40 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Settings, Activity, Zap } from 'lucide-react';
+import { LayoutDashboard, Settings, Zap, Menu, ChevronLeft } from 'lucide-react';
 
 const Sidebar = () => {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
   return (
-    <aside className="sidebar">
-      <div className="sidebar-logo">
-        <div className="sidebar-logo-icon">
-          <Zap size={16} />
-        </div>
-        <div>
-          <div className="sidebar-logo-text">Webhook Adapter</div>
-          <div className="sidebar-logo-sub">Universal v2</div>
+    <aside className={`sidebar ${isCollapsed ? 'collapsed' : ''}`} style={{ width: isCollapsed ? '70px' : '220px', transition: 'width 0.3s ease', position: 'relative' }}>
+      <div className="sidebar-logo" style={{ padding: isCollapsed ? '20px 0' : '20px 18px', justifyContent: isCollapsed ? 'center' : 'flex-start', minHeight: '80px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: isCollapsed ? 'center' : 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div className="sidebar-logo-icon">
+              <Zap size={16} />
+            </div>
+            {!isCollapsed && (
+              <div style={{ marginLeft: '10px' }}>
+                <div className="sidebar-logo-text">Webhook Adapter</div>
+                <div className="sidebar-logo-sub">Universal v2</div>
+              </div>
+            )}
+          </div>
+          
+          <button 
+            onClick={() => setIsCollapsed(!isCollapsed)} 
+            className="btn-icon" 
+            title="Toggle Sidebar"
+            style={{ 
+              position: isCollapsed ? 'absolute' : 'static',
+              top: isCollapsed ? '70px' : 'auto',
+              background: 'var(--border-soft)',
+              padding: '4px',
+              borderRadius: '4px'
+            }}
+          >
+            {isCollapsed ? <Menu size={16} /> : <ChevronLeft size={16} />}
+          </button>
         </div>
       </div>
 
@@ -19,26 +42,24 @@ const Sidebar = () => {
         <NavLink
           to="/"
           end
-          className={({ isActive }) =>
-            `sidebar-link ${isActive ? 'active' : ''}`
-          }
+          className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+          style={{ justifyContent: isCollapsed ? 'center' : 'flex-start', padding: isCollapsed ? '10px 0' : '9px 12px' }}
         >
-          <LayoutDashboard size={16} />
-          Dashboard
+          <LayoutDashboard size={18} style={{ flexShrink: 0 }} />
+          {!isCollapsed && <span>Dashboard</span>}
         </NavLink>
         <NavLink
           to="/settings"
-          className={({ isActive }) =>
-            `sidebar-link ${isActive ? 'active' : ''}`
-          }
+          className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+          style={{ justifyContent: isCollapsed ? 'center' : 'flex-start', padding: isCollapsed ? '10px 0' : '9px 12px' }}
         >
-          <Settings size={16} />
-          Settings
+          <Settings size={18} style={{ flexShrink: 0 }} />
+          {!isCollapsed && <span>Settings</span>}
         </NavLink>
       </nav>
 
-      <div className="sidebar-footer">
-        Universal Webhook Adapter v2.0
+      <div className="sidebar-footer" style={{ padding: '14px 16px', fontSize: '10px', color: 'var(--text-muted)', display: isCollapsed ? 'none' : 'block' }}>
+        v2.0.0 Stable
       </div>
     </aside>
   );

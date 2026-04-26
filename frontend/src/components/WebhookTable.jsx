@@ -47,7 +47,24 @@ const WebhookTable = ({ data, onRowClick, selectedId, isLoading }) => {
           className={`table-row ${selectedId === webhook.request_id ? 'selected' : ''}`}
           onClick={() => onRowClick(webhook)}
         >
-          <span className="table-cell-id">{webhook.request_id?.substring(0, 18)}…</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span className="table-cell-id">{webhook.request_id?.substring(0, 18)}…</span>
+            <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 500, letterSpacing: '0.2px' }}>
+              {(() => {
+                const providerName = webhook.provider ? (webhook.provider.charAt(0).toUpperCase() + webhook.provider.slice(1)) : 'Unknown';
+                if (webhook.status === 'queued') return `• Queued ${providerName} mapping`;
+                if (webhook.status === 'processing') return `• AI analyzing ${providerName}...`;
+                if (webhook.status === 'failed') return `⚠ ${providerName} mapping failed`;
+                if (webhook.status === 'processed') {
+                  if (!webhook.outbound_status) return `✓ ${providerName} normalized`;
+                  if (webhook.outbound_status === 'pending') return `• Forwarding ${providerName} to target...`;
+                  if (webhook.outbound_status === 'delivered') return `✓ ${providerName} delivered`;
+                  if (webhook.outbound_status === 'failed') return `⚠ ${providerName} delivery failed`;
+                }
+                return `• Initializing ${providerName}...`;
+              })()}
+            </span>
+          </div>
           <span><StatusBadge status={webhook.status} /></span>
           <span>
             {webhook.outbound_status

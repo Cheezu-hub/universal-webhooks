@@ -10,8 +10,8 @@ const Sidebar = () => {
       <div className="sidebar-logo" style={{ padding: isCollapsed ? '20px 0' : '20px 18px', justifyContent: isCollapsed ? 'center' : 'flex-start', minHeight: '80px' }}>
         <div style={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: isCollapsed ? 'center' : 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            <div className="sidebar-logo-icon">
-              <Zap size={16} />
+            <div className="sidebar-logo-icon" style={{ overflow: 'hidden' }}>
+              <img src="/logo.png" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             </div>
             {!isCollapsed && (
               <div style={{ marginLeft: '10px' }}>

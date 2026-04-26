@@ -76,7 +76,7 @@ html, body, #root {
 }
 
 .sidebar-logo-icon {
-  width: 34px; height: 34px;
+  width: 42px; height: 42px;
   background: var(--accent-soft);
   border: 1px solid #6366f140;
   border-radius: 8px;
@@ -86,7 +86,7 @@ html, body, #root {
 }
 
 .sidebar-logo-text {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: -0.3px;

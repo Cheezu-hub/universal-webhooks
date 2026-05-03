@@ -287,15 +287,20 @@ html, body, #root {
 
 .stat-card {
   background: var(--surface);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 18px;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  padding: 20px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--shadow-sm);
 }
 
 .stat-card:hover {
-  border-color: var(--border-soft);
-  box-shadow: var(--shadow-sm);
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: var(--shadow);
+  transform: translateY(-2px);
+  background: var(--surface-hover);
 }
 
 .stat-card-inner { display: flex; align-items: flex-start; gap: 14px; }

@@ -25,7 +25,17 @@ const Dashboard = () => {
   const [webhooks, setWebhooks] = useState([]);
   const [status, setStatus] = useState({ total: 0, processed: 0, failed: 0, queue_size: 0 });
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedWebhook, setSelectedWebhook] = useState(null);
+  const [selectedWebhook, setSelectedWebhook] = useState(<div className="dashboard-header">
+            <div className="animate-fade-in">
+              <h1 className="dashboard-title text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">
+                <Activity className="dashboard-title-icon text-indigo-400" size={26} />
+                Universal Adapter Hub
+              </h1>
+              <p className="dashboard-subtitle">
+                Monitor live webhooks, AI normalization, and outbound delivery.
+              </p>
+            </div>
+            <div className="dashboard-header-actions">);
   const [isSimulateModalOpen, setIsSimulateModalOpen] = useState(false);
   const [isLive, setIsLive] = useState(false);
   const [error, setError] = useState(null);

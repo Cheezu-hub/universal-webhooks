@@ -65,6 +65,8 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   background: var(--surface);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border-right: 1px solid var(--border);
   height: 100vh;
 }

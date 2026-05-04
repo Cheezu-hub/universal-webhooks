@@ -5,37 +5,31 @@ import SimulateModal from '../components/SimulateModal';
 import { getWebhooks, getSystemStatus, SSE_URL } from '../services/api';
 import toast from 'react-hot-toast';
 import { Activity, CheckCircle, XCircle, Layers, Wifi, WifiOff } from 'lucide-react';
+import { TiltCard } from '../components/ui/TiltCard';
+import { motion } from 'framer-motion';
 
 const StatCard = ({ label, value, icon: Icon, color, subtext }) => (
-  <div className="stat-card">
-    <div className="stat-card-inner">
-      <div className="stat-icon" style={{ background: `${color}18`, color }}>
-        <Icon size={20} />
-      </div>
-      <div className="stat-content">
-        <dt className="stat-label">{label}</dt>
-        <dd className="stat-value" style={{ color }}>{value}</dd>
-        {subtext && <p className="stat-subtext">{subtext}</p>}
+  <TiltCard className="h-full">
+    <div className="stat-card h-full flex flex-col justify-between" style={{ borderColor: `${color}40` }}>
+      <div className="stat-card-inner">
+        <div className="stat-icon" style={{ background: `${color}18`, color, boxShadow: `0 0 15px ${color}40` }}>
+          <Icon size={22} />
+        </div>
+        <div className="stat-content">
+          <dt className="stat-label">{label}</dt>
+          <dd className="stat-value" style={{ textShadow: `0 0 20px ${color}60` }}>{value}</dd>
+          {subtext && <p className="stat-subtext">{subtext}</p>}
+        </div>
       </div>
     </div>
-  </div>
+  </TiltCard>
 );
 
 const Dashboard = () => {
   const [webhooks, setWebhooks] = useState([]);
   const [status, setStatus] = useState({ total: 0, processed: 0, failed: 0, queue_size: 0 });
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedWebhook, setSelectedWebhook] = useState(<div className="dashboard-header">
-            <div className="animate-fade-in">
-              <h1 className="dashboard-title text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">
-                <Activity className="dashboard-title-icon text-indigo-400" size={26} />
-                Universal Adapter Hub
-              </h1>
-              <p className="dashboard-subtitle">
-                Monitor live webhooks, AI normalization, and outbound delivery.
-              </p>
-            </div>
-            <div className="dashboard-header-actions">);
+  const [selectedWebhook, setSelectedWebhook] = useState(null);
   const [isSimulateModalOpen, setIsSimulateModalOpen] = useState(false);
   const [isLive, setIsLive] = useState(false);
   const [error, setError] = useState(null);
@@ -113,8 +107,8 @@ const Dashboard = () => {
           {/* Header */}
           <div className="dashboard-header">
             <div>
-              <h1 className="dashboard-title">
-                <Activity className="dashboard-title-icon" size={26} />
+              <h1 className="dashboard-title text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">
+                <Activity className="dashboard-title-icon text-indigo-400" size={26} />
                 Universal Adapter Hub
               </h1>
               <p className="dashboard-subtitle">
@@ -144,45 +138,75 @@ const Dashboard = () => {
             </div>
           )}
 
-          {/* Stats Cards */}
-          <div className="stats-grid">
-            <StatCard
-              label="Total Webhooks"
-              value={status.total}
-              icon={Layers}
-              color="#6366f1"
-              subtext="All time"
-            />
-            <StatCard
-              label="Success Rate"
-              value={`${successRate}%`}
-              icon={CheckCircle}
-              color="#10b981"
-              subtext={`${status.processed} processed`}
-            />
-            <StatCard
-              label="Failed"
-              value={status.failed}
-              icon={XCircle}
-              color="#ef4444"
-              subtext="Exhausted retries"
-            />
-            <StatCard
-              label="Queue Depth"
-              value={status.queue_size}
-              icon={Activity}
-              color="#f59e0b"
-              subtext="Pending jobs"
-            />
+          {/* Stats Grid - Bento Layout */}
+          <div className="stats-grid mb-8">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+            >
+              <StatCard
+                label="Total Webhooks"
+                value={status.total}
+                icon={Layers}
+                color="#8b5cf6"
+                subtext="All time"
+              />
+            </motion.div>
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              <StatCard
+                label="Success Rate"
+                value={`${successRate}%`}
+                icon={CheckCircle}
+                color="#10b981"
+                subtext={`${status.processed} processed`}
+              />
+            </motion.div>
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+            >
+              <StatCard
+                label="Failed"
+                value={status.failed}
+                icon={XCircle}
+                color="#ef4444"
+                subtext="Exhausted retries"
+              />
+            </motion.div>
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+            >
+              <StatCard
+                label="Queue Depth"
+                value={status.queue_size}
+                icon={Activity}
+                color="#f59e0b"
+                subtext="Pending jobs"
+              />
+            </motion.div>
           </div>
 
           {/* Webhook Table */}
-          <WebhookTable
-            data={webhooks}
-            isLoading={isLoading}
-            selectedId={selectedWebhook?.request_id}
-            onRowClick={(webhook) => setSelectedWebhook(webhook)}
-          />
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+          >
+            <WebhookTable
+              data={webhooks}
+              isLoading={isLoading}
+              selectedId={selectedWebhook?.request_id}
+              onRowClick={(webhook) => setSelectedWebhook(webhook)}
+            />
+          </motion.div>
         </div>
       </div>
 
